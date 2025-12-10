@@ -30,15 +30,24 @@ local Window = Rayfield:CreateWindow({
 
 local WebhookSettings = {
     URL = "",
-    Username = "iNdomie.webhookHub",
-    AvatarURL = "https://i.ibb.co/7JWcBR2C/rovakook.gif",
-    Message = "",
-    EmbedTitle = "",
-    EmbedDescription = "",
-    EmbedColor = 7506394
+    Username = "Game Stats Bot",
+    AvatarURL = "https://i.imgur.com/your-avatar.png",
+    AutoSendEnabled = false,
+    AutoSendInterval = 1800
 }
 
-local function SendWebhook(UseEmbed)
+local PlayerStats = {
+    Money = 0,
+    Level = 0,
+    Playtime = 0,
+    CustomStat1 = 0,
+    CustomStat2 = 0,
+    CustomStat3 = ""
+}
+
+local AutoSendConnection = nil
+
+local function SendWebhook(EmbedData)
     if WebhookSettings.URL == "" then
         Rayfield:Notify({
             Title = "Error",
@@ -46,43 +55,14 @@ local function SendWebhook(UseEmbed)
             Duration = 3,
             Image = 4483362458
         })
-        return
+        return false
     end
     
     local Data = {
         username = WebhookSettings.Username,
-        avatar_url = WebhookSettings.AvatarURL ~= "" and WebhookSettings.AvatarURL or nil
+        avatar_url = WebhookSettings.AvatarURL,
+        embeds = {EmbedData}
     }
-    
-    if UseEmbed then
-        if WebhookSettings.EmbedTitle == "" then
-            Rayfield:Notify({
-                Title = "Error",
-                Content = "Please enter Embed title",
-                Duration = 3,
-                Image = 4483362458
-            })
-            return
-        end
-        
-        Data.embeds = {{
-            title = WebhookSettings.EmbedTitle,
-            description = WebhookSettings.EmbedDescription,
-            color = WebhookSettings.EmbedColor,
-            timestamp = os.date("!%Y-%m-%dT%H:%M:%S")
-        }}
-    else
-        if WebhookSettings.Message == "" then
-            Rayfield:Notify({
-                Title = "Error",
-                Content = "Please enter a message",
-                Duration = 3,
-                Image = 4483362458
-            })
-            return
-        end
-        Data.content = WebhookSettings.Message
-    end
     
     local Success, Response = pcall(function()
         return request({
@@ -96,24 +76,131 @@ local function SendWebhook(UseEmbed)
     end)
     
     if Success and Response.StatusCode == 204 then
-        Rayfield:Notify({
-            Title = "Success",
-            Content = "Message sent successfully",
-            Duration = 3,
-            Image = 4483362458
-        })
+        return true
     else
         Rayfield:Notify({
             Title = "Failed",
-            Content = "Error while sending: " .. tostring(Response and Response.StatusCode or "Unknown"),
+            Content = "Error: " .. tostring(Response and Response.StatusCode or "Unknown"),
             Duration = 4,
+            Image = 4483362458
+        })
+        return false
+    end
+end
+
+local function SendStatsReport()
+    local EmbedData = {
+        title = "Player Statistics Report",
+        description = "Automatic stats update",
+        color = 7506394,
+        fields = {
+            {
+                name = "Money",
+                value = tostring(PlayerStats.Money),
+                inline = true
+            },
+            {
+                name = "Level",
+                value = tostring(PlayerStats.Level),
+                inline = true
+            },
+            {
+                name = "Playtime",
+                value = tostring(PlayerStats.Playtime) .. " minutes",
+                inline = true
+            },
+            {
+                name = "Custom Stat 1",
+                value = tostring(PlayerStats.CustomStat1),
+                inline = true
+            },
+            {
+                name = "Custom Stat 2",
+                value = tostring(PlayerStats.CustomStat2),
+                inline = true
+            },
+            {
+                name = "Custom Info",
+                value = PlayerStats.CustomStat3 ~= "" and PlayerStats.CustomStat3 or "None",
+                inline = false
+            }
+        },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S"),
+        footer = {
+            text = "Player: " .. game.Players.LocalPlayer.Name
+        }
+    }
+    
+    if SendWebhook(EmbedData) then
+        Rayfield:Notify({
+            Title = "Stats Sent",
+            Content = "Statistics sent successfully",
+            Duration = 2,
             Image = 4483362458
         })
     end
 end
 
+local function StartAutoSend()
+    if AutoSendConnection then
+        AutoSendConnection:Disconnect()
+    end
+    
+    AutoSendConnection = task.spawn(function()
+        while WebhookSettings.AutoSendEnabled do
+            wait(WebhookSettings.AutoSendInterval)
+            if WebhookSettings.AutoSendEnabled then
+                SendStatsReport()
+            end
+        end
+    end)
+end
+
+local function SendShutdownAlert()
+    local EmbedData = {
+        title = "Script Shutdown Alert",
+        description = "The script has been disabled",
+        color = 15158332,
+        fields = {
+            {
+                name = "Player",
+                value = game.Players.LocalPlayer.Name,
+                inline = true
+            },
+            {
+                name = "Time",
+                value = os.date("%H:%M:%S"),
+                inline = true
+            },
+            {
+                name = "Final Money",
+                value = tostring(PlayerStats.Money),
+                inline = true
+            },
+            {
+                name = "Final Level",
+                value = tostring(PlayerStats.Level),
+                inline = true
+            }
+        },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S")
+    }
+    
+    SendWebhook(EmbedData)
+end
+
+game.Players.LocalPlayer.OnTeleport:Connect(function()
+    SendShutdownAlert()
+end)
+
+game:GetService("CoreGui").ChildRemoved:Connect(function(child)
+    if child.Name == "Rayfield" then
+        SendShutdownAlert()
+    end
+end)
+
 local SettingsTab = Window:CreateTab("Settings", 4483362458)
-local SettingsSection = SettingsTab:CreateSection("Webhook Settings")
+local SettingsSection = SettingsTab:CreateSection("Webhook Configuration")
 
 local WebhookInput = SettingsTab:CreateInput({
    Name = "Webhook URL",
@@ -130,185 +217,216 @@ local WebhookInput = SettingsTab:CreateInput({
    end,
 })
 
-local UsernameInput = SettingsTab:CreateInput({
-   Name = "Bot Username",
-   PlaceholderText = "iNdomie.webhookHub",
-   RemoveTextAfterFocusLost = false,
-   Callback = function(Text)
-      WebhookSettings.Username = Text
+local AutoSendToggle = SettingsTab:CreateToggle({
+   Name = "Auto Send Stats (Every 30 min)",
+   CurrentValue = false,
+   Flag = "AutoSendToggle",
+   Callback = function(Value)
+      WebhookSettings.AutoSendEnabled = Value
+      if Value then
+          StartAutoSend()
+          Rayfield:Notify({
+             Title = "Auto Send Enabled",
+             Content = "Stats will be sent every 30 minutes",
+             Duration = 3,
+             Image = 4483362458
+          })
+      else
+          if AutoSendConnection then
+              task.cancel(AutoSendConnection)
+          end
+          Rayfield:Notify({
+             Title = "Auto Send Disabled",
+             Content = "Automatic sending stopped",
+             Duration = 3,
+             Image = 4483362458
+          })
+      end
    end,
 })
 
-local AvatarInput = SettingsTab:CreateInput({
-   Name = "Bot Avatar URL (Optional)",
-   PlaceholderText = "https://example.com/avatar.png",
-   RemoveTextAfterFocusLost = false,
-   Callback = function(Text)
-      WebhookSettings.AvatarURL = Text
+local IntervalSlider = SettingsTab:CreateSlider({
+   Name = "Send Interval (minutes)",
+   Range = {5, 120},
+   Increment = 5,
+   CurrentValue = 30,
+   Flag = "IntervalSlider",
+   Callback = function(Value)
+      WebhookSettings.AutoSendInterval = Value * 60
    end,
 })
 
-local TestButton = SettingsTab:CreateButton({
-   Name = "Test Webhook",
+local StatsTab = Window:CreateTab("Player Stats", 4483362458)
+local StatsSection = StatsTab:CreateSection("Configure Stats to Track")
+
+local MoneyInput = StatsTab:CreateInput({
+   Name = "Money Amount",
+   PlaceholderText = "0",
+   RemoveTextAfterFocusLost = false,
+   Callback = function(Text)
+      PlayerStats.Money = tonumber(Text) or 0
+   end,
+})
+
+local LevelInput = StatsTab:CreateInput({
+   Name = "Player Level",
+   PlaceholderText = "0",
+   RemoveTextAfterFocusLost = false,
+   Callback = function(Text)
+      PlayerStats.Level = tonumber(Text) or 0
+   end,
+})
+
+local PlaytimeInput = StatsTab:CreateInput({
+   Name = "Playtime (minutes)",
+   PlaceholderText = "0",
+   RemoveTextAfterFocusLost = false,
+   Callback = function(Text)
+      PlayerStats.Playtime = tonumber(Text) or 0
+   end,
+})
+
+local CustomStat1Input = StatsTab:CreateInput({
+   Name = "Custom Stat 1",
+   PlaceholderText = "Enter value",
+   RemoveTextAfterFocusLost = false,
+   Callback = function(Text)
+      PlayerStats.CustomStat1 = tonumber(Text) or 0
+   end,
+})
+
+local CustomStat2Input = StatsTab:CreateInput({
+   Name = "Custom Stat 2",
+   PlaceholderText = "Enter value",
+   RemoveTextAfterFocusLost = false,
+   Callback = function(Text)
+      PlayerStats.CustomStat2 = tonumber(Text) or 0
+   end,
+})
+
+local CustomStat3Input = StatsTab:CreateInput({
+   Name = "Custom Info",
+   PlaceholderText = "Enter text",
+   RemoveTextAfterFocusLost = false,
+   Callback = function(Text)
+      PlayerStats.CustomStat3 = Text
+   end,
+})
+
+local SendNowBtn = StatsTab:CreateButton({
+   Name = "Send Stats Now",
    Callback = function()
-      WebhookSettings.Message = "This is a test message from iNdomie Webhook Hub"
-      SendWebhook(false)
-      WebhookSettings.Message = ""
+      SendStatsReport()
    end,
 })
 
-local MessageTab = Window:CreateTab("Normal Message", 4483362458)
-local MessageSection = MessageTab:CreateSection("Send Text Message")
+local ActionsTab = Window:CreateTab("Actions", 4483362458)
+local ActionsSection = ActionsTab:CreateSection("Manual Actions")
 
-local MessageInput = MessageTab:CreateInput({
-   Name = "Message Content",
-   PlaceholderText = "Type your message here...",
+local SendShutdownBtn = ActionsTab:CreateButton({
+   Name = "Send Shutdown Alert",
+   Callback = function()
+      SendShutdownAlert()
+   end,
+})
+
+local CustomMessageSection = ActionsTab:CreateSection("Custom Message")
+
+local CustomTitle = ""
+local CustomDesc = ""
+local CustomColor = 7506394
+
+local CustomTitleInput = ActionsTab:CreateInput({
+   Name = "Message Title",
+   PlaceholderText = "Enter title",
    RemoveTextAfterFocusLost = false,
    Callback = function(Text)
-      WebhookSettings.Message = Text
+      CustomTitle = Text
    end,
 })
 
-local QuickMessages = MessageTab:CreateSection("Quick Messages")
-
-local QuickMsg1 = MessageTab:CreateButton({
-   Name = "Hello everyone",
-   Callback = function()
-      WebhookSettings.Message = "Hello everyone"
-      SendWebhook(false)
-   end,
-})
-
-local QuickMsg2 = MessageTab:CreateButton({
-   Name = "Important alert",
-   Callback = function()
-      WebhookSettings.Message = "Important alert: Please pay attention"
-      SendWebhook(false)
-   end,
-})
-
-local SendMessageBtn = MessageTab:CreateButton({
-   Name = "Send Message",
-   Callback = function()
-      SendWebhook(false)
-   end,
-})
-
-local EmbedTab = Window:CreateTab("Embed", 4483362458)
-local EmbedSection = EmbedTab:CreateSection("Formatted Embed Messages")
-
-local EmbedTitleInput = EmbedTab:CreateInput({
-   Name = "Embed Title",
-   PlaceholderText = "Message title",
+local CustomDescInput = ActionsTab:CreateInput({
+   Name = "Message Description",
+   PlaceholderText = "Enter description",
    RemoveTextAfterFocusLost = false,
    Callback = function(Text)
-      WebhookSettings.EmbedTitle = Text
+      CustomDesc = Text
    end,
 })
 
-local EmbedDescInput = EmbedTab:CreateInput({
-   Name = "Embed Description",
-   PlaceholderText = "Message content...",
-   RemoveTextAfterFocusLost = false,
-   Callback = function(Text)
-      WebhookSettings.EmbedDescription = Text
-   end,
-})
-
-local ColorSection = EmbedTab:CreateSection("Embed Color")
-
-local ColorDropdown = EmbedTab:CreateDropdown({
-   Name = "Select Color",
-   Options = {
-      "Discord Blue (Default)",
-      "Green",
-      "Red",
-      "Yellow",
-      "Orange",
-      "Purple",
-      "Pink",
-      "Black"
-   },
-   CurrentOption = {"Discord Blue (Default)"},
+local CustomColorDropdown = ActionsTab:CreateDropdown({
+   Name = "Message Color",
+   Options = {"Blue", "Green", "Red", "Yellow", "Orange", "Purple"},
+   CurrentOption = {"Blue"},
    MultipleOptions = false,
-   Flag = "ColorDropdown",
+   Flag = "CustomColor",
    Callback = function(Option)
       local Colors = {
-         ["Discord Blue (Default)"] = 7506394,
+         ["Blue"] = 7506394,
          ["Green"] = 3066993,
          ["Red"] = 15158332,
          ["Yellow"] = 16776960,
          ["Orange"] = 16744192,
-         ["Purple"] = 10181046,
-         ["Pink"] = 16738740,
-         ["Black"] = 2303786
+         ["Purple"] = 10181046
       }
-      WebhookSettings.EmbedColor = Colors[Option[1]]
+      CustomColor = Colors[Option[1]]
    end,
 })
 
-local TemplateSection = EmbedTab:CreateSection("Ready Templates")
-
-local SuccessTemplate = EmbedTab:CreateButton({
-   Name = "Success Template",
+local SendCustomBtn = ActionsTab:CreateButton({
+   Name = "Send Custom Message",
    Callback = function()
-      WebhookSettings.EmbedTitle = "Successful Operation"
-      WebhookSettings.EmbedDescription = "Operation completed successfully"
-      WebhookSettings.EmbedColor = 3066993
-      SendWebhook(true)
-   end,
-})
-
-local ErrorTemplate = EmbedTab:CreateButton({
-   Name = "Error Template",
-   Callback = function()
-      WebhookSettings.EmbedTitle = "Error Occurred"
-      WebhookSettings.EmbedDescription = "An error occurred during execution"
-      WebhookSettings.EmbedColor = 15158332
-      SendWebhook(true)
-   end,
-})
-
-local InfoTemplate = EmbedTab:CreateButton({
-   Name = "Info Template",
-   Callback = function()
-      WebhookSettings.EmbedTitle = "Information"
-      WebhookSettings.EmbedDescription = "Important information for users"
-      WebhookSettings.EmbedColor = 7506394
-      SendWebhook(true)
-   end,
-})
-
-local SendEmbedBtn = EmbedTab:CreateButton({
-   Name = "Send Embed",
-   Callback = function()
-      SendWebhook(true)
+      if CustomTitle == "" then
+          Rayfield:Notify({
+             Title = "Error",
+             Content = "Please enter a title",
+             Duration = 3,
+             Image = 4483362458
+          })
+          return
+      end
+      
+      local EmbedData = {
+          title = CustomTitle,
+          description = CustomDesc,
+          color = CustomColor,
+          timestamp = os.date("!%Y-%m-%dT%H:%M:%S")
+      }
+      
+      if SendWebhook(EmbedData) then
+          Rayfield:Notify({
+             Title = "Sent",
+             Content = "Custom message sent",
+             Duration = 2,
+             Image = 4483362458
+          })
+      end
    end,
 })
 
 local HelpTab = Window:CreateTab("Help", 4483362458)
 local HelpSection = HelpTab:CreateSection("How to Use")
 
-local Step1 = HelpTab:CreateLabel("1. Go to Settings tab")
-local Step2 = HelpTab:CreateLabel("2. Enter Discord Webhook URL")
-local Step3 = HelpTab:CreateLabel("3. Choose message type (Normal or Embed)")
-local Step4 = HelpTab:CreateLabel("4. Write your message and click send")
+local Step1 = HelpTab:CreateLabel("1. Enter Webhook URL in Settings")
+local Step2 = HelpTab:CreateLabel("2. Configure player stats in Player Stats tab")
+local Step3 = HelpTab:CreateLabel("3. Enable Auto Send for automatic reports")
+local Step4 = HelpTab:CreateLabel("4. Script sends alert when closed")
 
-local InfoSection = HelpTab:CreateSection("Additional Information")
-local InfoLabel1 = HelpTab:CreateLabel("- You can customize bot name and avatar")
-local InfoLabel2 = HelpTab:CreateLabel("- Embed supports multiple colors")
-local InfoLabel3 = HelpTab:CreateLabel("- Ready templates for quick use")
+local InfoSection = HelpTab:CreateSection("Features")
+local Info1 = HelpTab:CreateLabel("- Automatic stats reports every 30 minutes")
+local Info2 = HelpTab:CreateLabel("- Shutdown alert when script closes")
+local Info3 = HelpTab:CreateLabel("- Customizable stats tracking")
+local Info4 = HelpTab:CreateLabel("- Manual send option available")
 
 local CreditsSection = HelpTab:CreateSection("Credits")
 local CreditsLabel = HelpTab:CreateLabel("Made by: iNdomie")
-local VersionLabel = HelpTab:CreateLabel("Version: 1.0")
+local VersionLabel = HelpTab:CreateLabel("Version: 2.0")
 
 Rayfield:Notify({
    Title = "Welcome",
-   Content = "iNdomie Webhook Hub loaded successfully",
+   Content = "Webhook Hub loaded successfully",
    Duration = 5,
    Image = 4483362458
 })
-
 
 print("iNdomie Webhook Hub loaded successfully")
