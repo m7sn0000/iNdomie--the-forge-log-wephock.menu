@@ -1,7 +1,7 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "iNdomie Webhook Hub",
+   Name = " Webhook Hub",
    LoadingTitle = "Webhook Hub",
    LoadingSubtitle = "by iNdomie",
    Theme = "DarkBlue",
@@ -309,5 +309,6 @@ Rayfield:Notify({
    Duration = 5,
    Image = 4483362458
 })
+
 
 print("iNdomie Webhook Hub loaded successfully")
