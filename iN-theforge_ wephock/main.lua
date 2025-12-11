@@ -42,9 +42,9 @@ local WebhookSettings = {
     AvatarURL = "https://i.ibb.co/7JWcBR2C/rovakook.gif",
     ShutdownAlertEnabled = true,
     StatusUpdatesEnabled = true,
-    StatusInterval = 30 * 60,
+    StatusInterval = 30 * 60, -- بالثواني
     ScreenshotEnabled = false,
-    ScreenshotInterval = 30 * 60,
+    ScreenshotInterval = 30 * 60, -- بالثواني
     ImgbbKey = "",
     AttachScreenshotToStatus = false
 }
@@ -202,13 +202,14 @@ local function SendStatusReport(attachScreenshot)
     SendWebhook(EmbedData)
 end
 
+-- تحديث الحلقات بشكل فوري
 local function StartStatusLoop()
     if StatusConnection then pcall(task.cancel, StatusConnection) end
     if not WebhookSettings.StatusUpdatesEnabled then return end
     StatusConnection = task.spawn(function()
         while WebhookSettings.StatusUpdatesEnabled do
-            task.wait(WebhookSettings.StatusInterval)
             pcall(function() SendStatusReport(WebhookSettings.AttachScreenshotToStatus) end)
+            task.wait(WebhookSettings.StatusInterval)
         end
     end)
 end
@@ -218,19 +219,17 @@ local function StartScreenshotLoop()
     if not WebhookSettings.ScreenshotEnabled then return end
     ScreenshotConnection = task.spawn(function()
         while WebhookSettings.ScreenshotEnabled do
+            local url = CaptureAndUpload()
+            if url then
+                SendWebhook({
+                    title = "Automatic Screenshot",
+                    description = "Periodic Roblox screenshot",
+                    color = 16744192,
+                    fields = {{name = "URL", value = url, inline = false}},
+                    timestamp = os.date("!%Y-%m-%dT%H:%M:%S")
+                })
+            end
             task.wait(WebhookSettings.ScreenshotInterval)
-            pcall(function()
-                local url = CaptureAndUpload()
-                if url then
-                    SendWebhook({
-                        title = "Automatic Screenshot",
-                        description = "Periodic Roblox screenshot",
-                        color = 16744192,
-                        fields = {{name = "URL", value = url, inline = false}},
-                        timestamp = os.date("!%Y-%m-%dT%H:%M:%S")
-                    })
-                end
-            end)
         end
     end)
 end
@@ -243,33 +242,33 @@ local ActionsTab = Window:CreateTab("Actions", 4483362458)
 local HelpTab = Window:CreateTab("Help", 4483362458)
 
 -- Sections
-local SettingsSection = SettingsTab:CreateSection("Webhook Configuration")
-local ShutdownSection = SettingsTab:CreateSection("Shutdown Alert Settings")
-local StatusSection = SettingsTab:CreateSection("Status Update Settings")
-local ScreenshotSection = SettingsTab:CreateSection("Screenshot Settings")
-local ActionsSection = ActionsTab:CreateSection("Manual Actions")
-local HelpSection = HelpTab:CreateSection("How to Use")
+SettingsTab:CreateSection("Webhook Configuration")
+SettingsTab:CreateSection("Shutdown Alert Settings")
+SettingsTab:CreateSection("Status Update Settings")
+SettingsTab:CreateSection("Screenshot Settings")
+ActionsTab:CreateSection("Manual Actions")
+HelpTab:CreateSection("How to Use")
 
 -- Inputs/Toggles/Sliders/Buttons
 SettingsTab:CreateInput({
    Name = "Webhook URL",
    PlaceholderText = "https://discord.com/api/webhooks/...",
    Flag = "WebhookURLInput",
-   Callback = function(Text) pcall(function() WebhookSettings.URL = Text end) end
+   Callback = function(Text) WebhookSettings.URL = Text end
 })
 
 SettingsTab:CreateInput({
    Name = "ImgBB API Key",
    PlaceholderText = "Paste your ImgBB API key here",
    Flag = "ImgbbKeyInput",
-   Callback = function(Text) pcall(function() WebhookSettings.ImgbbKey = Text end) end
+   Callback = function(Text) WebhookSettings.ImgbbKey = Text end
 })
 
 SettingsTab:CreateToggle({
    Name = "Send Shutdown Alert",
    CurrentValue = true,
    Flag = "ShutdownToggleInput",
-   Callback = function(Value) pcall(function() WebhookSettings.ShutdownAlertEnabled = Value end) end
+   Callback = function(Value) WebhookSettings.ShutdownAlertEnabled = Value end
 })
 
 SettingsTab:CreateToggle({
@@ -277,10 +276,8 @@ SettingsTab:CreateToggle({
    CurrentValue = true,
    Flag = "StatusToggleInput",
    Callback = function(Value)
-      pcall(function()
-         WebhookSettings.StatusUpdatesEnabled = Value
-         StartStatusLoop()
-      end)
+      WebhookSettings.StatusUpdatesEnabled = Value
+      StartStatusLoop()
    end
 })
 
@@ -291,10 +288,8 @@ SettingsTab:CreateSlider({
    CurrentValue = 30,
    Flag = "StatusIntervalSlider",
    Callback = function(Value)
-      pcall(function()
-         WebhookSettings.StatusInterval = Value * 60
-         StartStatusLoop()
-      end)
+      WebhookSettings.StatusInterval = Value * 60
+      StartStatusLoop()
    end
 })
 
@@ -302,7 +297,7 @@ SettingsTab:CreateToggle({
    Name = "Attach Screenshot to Status",
    CurrentValue = true,
    Flag = "AttachScreenshotToggle",
-   Callback = function(Value) pcall(function() WebhookSettings.AttachScreenshotToStatus = Value end) end
+   Callback = function(Value) WebhookSettings.AttachScreenshotToStatus = Value end
 })
 
 SettingsTab:CreateToggle({
@@ -310,10 +305,8 @@ SettingsTab:CreateToggle({
    CurrentValue = true,
    Flag = "ScreenshotToggleInput",
    Callback = function(Value)
-      pcall(function()
-         WebhookSettings.ScreenshotEnabled = Value
-         StartScreenshotLoop()
-      end)
+      WebhookSettings.ScreenshotEnabled = Value
+      StartScreenshotLoop()
    end
 })
 
@@ -324,23 +317,22 @@ SettingsTab:CreateSlider({
    CurrentValue = 30,
    Flag = "ScreenshotIntervalSlider",
    Callback = function(Value)
-      pcall(function()
-         WebhookSettings.ScreenshotInterval = Value * 60
-         StartScreenshotLoop()
-      end)
+      WebhookSettings.ScreenshotInterval = Value * 60
+      StartScreenshotLoop()
    end
 })
 
+-- Actions
 ActionsTab:CreateButton({
    Name = "Send Status Now",
    Flag = "SendStatusButton",
-   Callback = function() pcall(function() SendStatusReport(WebhookSettings.AttachScreenshotToStatus) end) end
+   Callback = function() SendStatusReport(WebhookSettings.AttachScreenshotToStatus) end
 })
 
 ActionsTab:CreateButton({
    Name = "Take Screenshot & Upload Now",
    Flag = "ManualScreenshotButton",
-   Callback = function() pcall(function()
+   Callback = function()
       local url = CaptureAndUpload()
       if url then
          SendWebhook({
@@ -351,16 +343,16 @@ ActionsTab:CreateButton({
             timestamp = os.date("!%Y-%m-%dT%H:%M:%S")
          })
       end
-   end) end
+   end
 })
 
 ActionsTab:CreateButton({
    Name = "Send Shutdown Alert Manually",
    Flag = "ManualShutdownButton",
-   Callback = function() pcall(function()
+   Callback = function()
       ShutdownSent = false
       SendShutdownAlert("Manual shutdown alert")
-   end) end
+   end
 })
 
 -- ========================
